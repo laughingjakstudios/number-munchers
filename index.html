@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Number Munchers</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: #0a0a1a;
+    overflow: hidden;
+    touch-action: none;
+    overscroll-behavior: none;
+    font-family: "Courier New", Courier, monospace;
+    color: #fff;
+  }
+
+  #game {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: env(safe-area-inset-top, 12px) env(safe-area-inset-right, 12px)
+             env(safe-area-inset-bottom, 12px) env(safe-area-inset-left, 12px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* === TITLE SCREEN === */
+  #title-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    z-index: 10;
+  }
+
+  #title-screen h1 {
+    font-size: clamp(28px, 7vw, 52px);
+    color: #ffe066;
+    text-shadow: 3px 3px 0 #b8860b, 0 0 20px rgba(255, 224, 102, 0.4);
+    text-align: center;
+    letter-spacing: 2px;
+    line-height: 1.2;
+  }
+
+  #title-screen .subtitle {
+    font-size: clamp(14px, 3vw, 20px);
+    color: #88bbff;
+    text-align: center;
+  }
+
+  #title-screen .tap-start {
+    font-size: clamp(18px, 4vw, 28px);
+    color: #66ff88;
+    animation: pulse 1.5s ease-in-out infinite;
+    margin-top: 20px;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* === HUD === */
+  #hud {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 4px;
+    font-size: clamp(14px, 3vw, 20px);
+    font-weight: bold;
+  }
+
+  #score { color: #fff; }
+  #level-display { color: #88bbff; }
+  #lives { color: #ff4466; font-size: clamp(16px, 3.5vw, 24px); letter-spacing: 4px; }
+
+  /* === PROMPT === */
+  #prompt {
+    font-size: clamp(16px, 3.5vw, 26px);
+    color: #ffe066;
+    text-align: center;
+    padding: 10px 16px;
+    font-weight: bold;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 0 0 10px rgba(255, 224, 102, 0.3);
+  }
+
+  /* === GRID === */
+  #grid-container {
+    position: relative;
+    margin: 8px 0;
+  }
+
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 3px;
+    background: #1a1a3e;
+    border: 3px solid #4a4a8a;
+    border-radius: 6px;
+    padding: 3px;
+    width: min(92vw, 540px);
+    height: min(70vh, 420px);
+    height: min(70dvh, 420px);
+  }
+
+  .cell {
+    background: #2a2a5a;
+    border: 2px solid #3a3a7a;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(18px, 4vw, 28px);
+    font-weight: bold;
+    color: #fff;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    touch-action: manipulation;
+  }
+
+  .cell:active {
+    background: #3a3a7a;
+  }
+
+  .cell.munched {
+    color: transparent;
+    background: #1a1a3e;
+    border-color: #2a2a4a;
+  }
+
+  .cell.correct-flash {
+    background: #1a4a2a;
+    border-color: #44bb66;
+  }
+
+  .cell.wrong-flash {
+    background: #4a1a1a;
+    border-color: #bb4444;
+  }
+
+  .cell.has-muncher {
+    background: #1a2a1a;
+    border-color: #44cc33;
+    box-shadow: inset 0 0 12px rgba(68, 204, 51, 0.3);
+  }
+
+  /* === SPRITES (positioned over grid) === */
+  /* Muncher has an open mouth — the number text shows through the gap */
+  #muncher {
+    position: absolute;
+    z-index: 5;
+    transition: left 0.15s ease-out, top 0.15s ease-out;
+    pointer-events: none;
+    image-rendering: pixelated;
+  }
+
+
+  .troggle {
+    position: absolute;
+    z-index: 4;
+    transition: left 0.3s ease-in-out, top 0.3s ease-in-out;
+    pointer-events: none;
+    image-rendering: pixelated;
+  }
+
+  /* === FLOATING TEXT === */
+  .float-text {
+    position: absolute;
+    z-index: 20;
+    font-weight: bold;
+    font-size: clamp(14px, 3vw, 22px);
+    pointer-events: none;
+    animation: floatUp 0.8s ease-out forwards;
+    text-shadow: 1px 1px 0 #000;
+  }
+
+  @keyframes floatUp {
+    0%   { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(-50px); opacity: 0; }
+  }
+
+  /* === OVERLAY SCREENS === */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    background: rgba(10, 10, 26, 0.85);
+    gap: 16px;
+  }
+
+  #overlay.hidden { display: none; }
+
+  #overlay h2 {
+    font-size: clamp(28px, 7vw, 48px);
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  #overlay p {
+    font-size: clamp(16px, 3.5vw, 24px);
+    text-align: center;
+  }
+
+  .celebrate { color: #66ff88; }
+  .danger { color: #ff4466; }
+  .info { color: #88bbff; }
+
+  /* === STARS === */
+  .star {
+    position: absolute;
+    font-size: clamp(20px, 5vw, 36px);
+    animation: starBurst 1s ease-out forwards;
+    pointer-events: none;
+    z-index: 31;
+  }
+
+  @keyframes starBurst {
+    0%   { transform: translate(0, 0) scale(0.5); opacity: 1; }
+    100% { transform: translate(var(--tx), var(--ty)) scale(1.2); opacity: 0; }
+  }
+
+  /* === SCREEN FLASH === */
+  #flash {
+    position: absolute;
+    inset: 0;
+    z-index: 25;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  #flash.red { background: #ff2244; opacity: 0.3; }
+  #flash.green { background: #22ff44; opacity: 0.15; }
+
+  /* === GAME OVER === */
+  #game-over-screen { display: none; }
+
+  /* Hide sections based on state */
+  .state-title #hud,
+  .state-title #prompt,
+  .state-title #grid-container { display: none; }
+
+  .state-playing #title-screen,
+  .state-level-complete #title-screen,
+  .state-life-lost #title-screen,
+  .state-game-over #title-screen { display: none; }
+</style>
+</head>
+<body>
+<div id="game" class="state-title">
+  <!-- Title Screen -->
+  <div id="title-screen">
+    <div id="title-muncher-sprite"></div>
+    <h1>NUMBER<br>MUNCHERS</h1>
+    <p class="subtitle">A math adventure!</p>
+    <p class="tap-start">TAP TO START</p>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="score">Score: 0</div>
+    <div id="level-display">Level 1</div>
+    <div id="lives"></div>
+  </div>
+
+  <!-- Prompt -->
+  <div id="prompt"></div>
+
+  <!-- Grid -->
+  <div id="grid-container">
+    <div id="grid"></div>
+    <div id="muncher"></div>
+  </div>
+
+  <!-- Screen flash overlay -->
+  <div id="flash"></div>
+
+  <!-- State overlay -->
+  <div id="overlay" class="hidden"></div>
+</div>
+
+<script>
+// ============================================================
+// NUMBER MUNCHERS — Complete Game
+// ============================================================
+
+// === CONSTANTS ===
+const ROWS = 5;
+const COLS = 6;
+const INITIAL_LIVES = 3;
+const MAX_LIVES = 5;
+const POINTS_CORRECT = 10;
+const POINTS_WRONG = -5;
+const POINTS_LEVEL_BONUS = 50;
+const EXTRA_LIFE_FIRST = 200;
+const EXTRA_LIFE_INTERVAL = 300;
+
+const ENCOURAGE_CORRECT = ['YUM!', 'TASTY!', 'NOM NOM!', 'NICE!', 'YAY!', 'GREAT!', 'CHOMP!'];
+const ENCOURAGE_WRONG = ['Oops!', 'Nope!', 'Try again!', 'Not that one!'];
+const ENCOURAGE_LEVEL = ['AMAZING JOB!', 'YOU DID IT!', 'SUPER MUNCHER!', 'FANTASTIC!', 'WOW!'];
+
+// === PIXEL ART SPRITES ===
+// Each sprite is an array of [x, y, color] — 14x14 grid
+// Muncher: classic green frog-like body with OPEN MOUTH so the number shows through
+// The mouth area (rows 7-10, cols 3-10) has NO pixels — the cell's number text is visible there
+const G1 = '#44cc33'; // bright green
+const G2 = '#33aa22'; // dark green
+const GH = '#55dd44'; // highlight green
+
+const MUNCHER_IDLE = [
+  // Top of head — rounded
+  [4,0,G1],[5,0,G1],[6,0,G1],[7,0,G1],[8,0,G1],[9,0,G1],
+  [3,1,G1],[4,1,GH],[5,1,GH],[6,1,G1],[7,1,G1],[8,1,G1],[9,1,G1],[10,1,G1],
+  [2,2,G1],[3,2,G1],[4,2,G1],[5,2,G1],[6,2,G1],[7,2,G1],[8,2,G1],[9,2,G1],[10,2,G1],[11,2,G1],
+  // Eyes — big, round, friendly
+  [1,3,G1],[2,3,G1],[3,3,'#fff'],[4,3,'#fff'],[5,3,'#fff'],[6,3,G1],[7,3,G1],[8,3,'#fff'],[9,3,'#fff'],[10,3,'#fff'],[11,3,G1],[12,3,G1],
+  [1,4,G1],[2,4,G1],[3,4,'#fff'],[4,4,'#111'],[5,4,'#111'],[6,4,G1],[7,4,G1],[8,4,'#fff'],[9,4,'#111'],[10,4,'#111'],[11,4,G1],[12,4,G1],
+  [1,5,G1],[2,5,G1],[3,5,'#fff'],[4,5,'#111'],[5,5,'#111'],[6,5,G1],[7,5,G1],[8,5,'#fff'],[9,5,'#111'],[10,5,'#111'],[11,5,G1],[12,5,G1],
+  // Upper lip / top of mouth opening
+  [1,6,G1],[2,6,G2],[3,6,G2],[4,6,G2],[5,6,G2],[6,6,G2],[7,6,G2],[8,6,G2],[9,6,G2],[10,6,G2],[11,6,G2],[12,6,G1],
+  // MOUTH OPENING — rows 7-9 have pixels only on left and right edges
+  // The number shows through this gap!
+  [0,7,G1],[1,7,G1],[12,7,G1],[13,7,G1],
+  [0,8,G1],[1,8,G2],[12,8,G2],[13,8,G1],
+  [0,9,G1],[1,9,G1],[12,9,G1],[13,9,G1],
+  // Lower lip / jaw
+  [1,10,G1],[2,10,G2],[3,10,G2],[4,10,G2],[5,10,G2],[6,10,G2],[7,10,G2],[8,10,G2],[9,10,G2],[10,10,G2],[11,10,G2],[12,10,G1],
+  // Bottom body
+  [2,11,G1],[3,11,G1],[4,11,G1],[5,11,G1],[6,11,G1],[7,11,G1],[8,11,G1],[9,11,G1],[10,11,G1],[11,11,G1],
+  // Feet
+  [2,12,G2],[3,12,G2],[4,12,G2],[9,12,G2],[10,12,G2],[11,12,G2],
+  [2,13,G2],[3,13,G2],[10,13,G2],[11,13,G2],
+];
+
+// Chomp: mouth CLOSES (all pixels filled) — the number vanishes as it's eaten
+const MUNCHER_CHOMP = [
+  // Top of head
+  [4,0,G1],[5,0,G1],[6,0,G1],[7,0,G1],[8,0,G1],[9,0,G1],
+  [3,1,G1],[4,1,GH],[5,1,GH],[6,1,G1],[7,1,G1],[8,1,G1],[9,1,G1],[10,1,G1],
+  [2,2,G1],[3,2,G1],[4,2,G1],[5,2,G1],[6,2,G1],[7,2,G1],[8,2,G1],[9,2,G1],[10,2,G1],[11,2,G1],
+  // Happy squinting eyes
+  [1,3,G1],[2,3,G1],[3,3,G1],[4,3,G1],[5,3,G1],[6,3,G1],[7,3,G1],[8,3,G1],[9,3,G1],[10,3,G1],[11,3,G1],[12,3,G1],
+  [1,4,G1],[2,4,G1],[3,4,'#111'],[4,4,'#111'],[5,4,'#111'],[6,4,G1],[7,4,G1],[8,4,'#111'],[9,4,'#111'],[10,4,'#111'],[11,4,G1],[12,4,G1],
+  [1,5,G1],[2,5,G1],[3,5,G1],[4,5,G1],[5,5,G1],[6,5,G1],[7,5,G1],[8,5,G1],[9,5,G1],[10,5,G1],[11,5,G1],[12,5,G1],
+  // Rosy cheeks
+  [1,6,G1],[2,6,'#ff8888'],[3,6,G1],[4,6,G1],[5,6,G1],[6,6,G1],[7,6,G1],[8,6,G1],[9,6,G1],[10,6,G1],[11,6,'#ff8888'],[12,6,G1],
+  // Mouth CLOSED — filled with body color + smile line
+  [0,7,G1],[1,7,G1],[2,7,G1],[3,7,G1],[4,7,G1],[5,7,G1],[6,7,G1],[7,7,G1],[8,7,G1],[9,7,G1],[10,7,G1],[11,7,G1],[12,7,G1],[13,7,G1],
+  [0,8,G1],[1,8,G2],[2,8,G2],[3,8,'#228822'],[4,8,'#228822'],[5,8,'#228822'],[6,8,'#228822'],[7,8,'#228822'],[8,8,'#228822'],[9,8,'#228822'],[10,8,'#228822'],[11,8,G2],[12,8,G2],[13,8,G1],
+  [0,9,G1],[1,9,G1],[2,9,G1],[3,9,G1],[4,9,G1],[5,9,G1],[6,9,G1],[7,9,G1],[8,9,G1],[9,9,G1],[10,9,G1],[11,9,G1],[12,9,G1],[13,9,G1],
+  // Lower body
+  [1,10,G1],[2,10,G1],[3,10,G1],[4,10,G1],[5,10,G1],[6,10,G1],[7,10,G1],[8,10,G1],[9,10,G1],[10,10,G1],[11,10,G1],[12,10,G1],
+  [2,11,G1],[3,11,G1],[4,11,G1],[5,11,G1],[6,11,G1],[7,11,G1],[8,11,G1],[9,11,G1],[10,11,G1],[11,11,G1],
+  // Feet
+  [2,12,G2],[3,12,G2],[4,12,G2],[9,12,G2],[10,12,G2],[11,12,G2],
+  [2,13,G2],[3,13,G2],[10,13,G2],[11,13,G2],
+];
+
+// Yuck face: squinted eyes + tongue sticking out (wrong munch)
+const MUNCHER_YUCK = [
+  // Top of head
+  [4,0,G1],[5,0,G1],[6,0,G1],[7,0,G1],[8,0,G1],[9,0,G1],
+  [3,1,G1],[4,1,GH],[5,1,GH],[6,1,G1],[7,1,G1],[8,1,G1],[9,1,G1],[10,1,G1],
+  [2,2,G1],[3,2,G1],[4,2,G1],[5,2,G1],[6,2,G1],[7,2,G1],[8,2,G1],[9,2,G1],[10,2,G1],[11,2,G1],
+  // Squinted eyes — single row, look like they snapped shut
+  [1,3,G1],[2,3,G1],[3,3,G1],[4,3,G1],[5,3,G1],[6,3,G1],[7,3,G1],[8,3,G1],[9,3,G1],[10,3,G1],[11,3,G1],[12,3,G1],
+  [1,4,G1],[2,4,G1],[3,4,'#111'],[4,4,'#111'],[5,4,'#111'],[6,4,G1],[7,4,G1],[8,4,'#111'],[9,4,'#111'],[10,4,'#111'],[11,4,G1],[12,4,G1],
+  [1,5,G1],[2,5,G1],[3,5,G1],[4,5,G1],[5,5,G1],[6,5,G1],[7,5,G1],[8,5,G1],[9,5,G1],[10,5,G1],[11,5,G1],[12,5,G1],
+  // Upper lip
+  [1,6,G1],[2,6,G2],[3,6,G2],[4,6,G2],[5,6,G2],[6,6,G2],[7,6,G2],[8,6,G2],[9,6,G2],[10,6,G2],[11,6,G2],[12,6,G1],
+  // Mouth open with TONGUE sticking out
+  [0,7,G1],[1,7,G1],[5,7,'#ff6688'],[6,7,'#ff6688'],[7,7,'#ff6688'],[8,7,'#ff6688'],[12,7,G1],[13,7,G1],
+  [0,8,G1],[1,8,G2],[4,8,'#ff6688'],[5,8,'#ff5577'],[6,8,'#ff5577'],[7,8,'#ff5577'],[8,8,'#ff5577'],[9,8,'#ff6688'],[12,8,G2],[13,8,G1],
+  [0,9,G1],[1,9,G1],[5,9,'#ff6688'],[6,9,'#ff6688'],[7,9,'#ff6688'],[8,9,'#ff6688'],[12,9,G1],[13,9,G1],
+  // Lower lip with tongue poking through
+  [1,10,G1],[2,10,G2],[3,10,G2],[4,10,G2],[5,10,G2],[6,10,'#ff6688'],[7,10,'#ff5577'],[8,10,G2],[9,10,G2],[10,10,G2],[11,10,G2],[12,10,G1],
+  // Tongue hangs down past the body
+  [2,11,G1],[3,11,G1],[4,11,G1],[5,11,G1],[6,11,'#ff6688'],[7,11,'#ff5577'],[8,11,G1],[9,11,G1],[10,11,G1],[11,11,G1],
+  // Tongue tip + feet
+  [2,12,G2],[3,12,G2],[4,12,G2],[6,12,'#ff5577'],[7,12,'#ff6688'],[9,12,G2],[10,12,G2],[11,12,G2],
+  [2,13,G2],[3,13,G2],[6,13,'#ff6688'],[10,13,G2],[11,13,G2],
+];
+
+// Troggle: purple spiky monster with yellow eyes — frame 1
+const T1 = '#aa44cc'; // purple body
+const T2 = '#8833aa'; // dark purple
+const TH = '#cc66ee'; // highlight purple
+
+const TROGGLE_1 = [
+  // Spikes
+  [2,0,T1],[6,0,T1],[10,0,T1],
+  [1,1,T2],[2,1,T1],[3,1,T2],[5,1,T2],[6,1,T1],[7,1,T2],[9,1,T2],[10,1,T1],[11,1,T2],
+  // Head
+  [2,2,T1],[3,2,T1],[4,2,T1],[5,2,T1],[6,2,T1],[7,2,T1],[8,2,T1],[9,2,T1],[10,2,T1],
+  // Eyes — angry
+  [1,3,T1],[2,3,T1],[3,3,'#ffff00'],[4,3,'#ffff00'],[5,3,T1],[6,3,T1],[7,3,T1],[8,3,'#ffff00'],[9,3,'#ffff00'],[10,3,T1],[11,3,T1],
+  [1,4,T1],[2,4,T1],[3,4,'#ff2222'],[4,4,'#111'],[5,4,T1],[6,4,T1],[7,4,T1],[8,4,'#ff2222'],[9,4,'#111'],[10,4,T1],[11,4,T1],
+  // Brow / scowl
+  [1,5,T1],[2,5,T1],[3,5,T1],[4,5,T1],[5,5,T1],[6,5,T1],[7,5,T1],[8,5,T1],[9,5,T1],[10,5,T1],[11,5,T1],
+  // Mouth — jagged teeth
+  [1,6,T2],[2,6,'#222'],[3,6,'#fff'],[4,6,'#222'],[5,6,'#222'],[6,6,'#fff'],[7,6,'#222'],[8,6,'#222'],[9,6,'#fff'],[10,6,'#222'],[11,6,T2],
+  [1,7,T2],[2,7,'#222'],[3,7,'#222'],[4,7,'#ff4444'],[5,7,'#ff4444'],[6,7,'#ff4444'],[7,7,'#ff4444'],[8,7,'#ff4444'],[9,7,'#222'],[10,7,'#222'],[11,7,T2],
+  // Body
+  [2,8,T1],[3,8,T1],[4,8,T1],[5,8,T1],[6,8,T1],[7,8,T1],[8,8,T1],[9,8,T1],[10,8,T1],
+  [3,9,T1],[4,9,T1],[5,9,T1],[6,9,T1],[7,9,T1],[8,9,T1],[9,9,T1],
+  // Feet (frame 1 — left foot forward)
+  [3,10,T2],[4,10,T2],[8,10,T2],[9,10,T2],
+  [2,11,T2],[3,11,T2],[8,11,T2],[9,11,T2],
+];
+
+// Troggle frame 2 — right foot forward
+const TROGGLE_2 = [
+  // Spikes
+  [2,0,T1],[6,0,T1],[10,0,T1],
+  [1,1,T2],[2,1,T1],[3,1,T2],[5,1,T2],[6,1,T1],[7,1,T2],[9,1,T2],[10,1,T1],[11,1,T2],
+  // Head
+  [2,2,T1],[3,2,T1],[4,2,T1],[5,2,T1],[6,2,T1],[7,2,T1],[8,2,T1],[9,2,T1],[10,2,T1],
+  // Eyes
+  [1,3,T1],[2,3,T1],[3,3,'#ffff00'],[4,3,'#ffff00'],[5,3,T1],[6,3,T1],[7,3,T1],[8,3,'#ffff00'],[9,3,'#ffff00'],[10,3,T1],[11,3,T1],
+  [1,4,T1],[2,4,T1],[3,4,'#111'],[4,4,'#ff2222'],[5,4,T1],[6,4,T1],[7,4,T1],[8,4,'#111'],[9,4,'#ff2222'],[10,4,T1],[11,4,T1],
+  // Brow
+  [1,5,T1],[2,5,T1],[3,5,T1],[4,5,T1],[5,5,T1],[6,5,T1],[7,5,T1],[8,5,T1],[9,5,T1],[10,5,T1],[11,5,T1],
+  // Mouth
+  [1,6,T2],[2,6,'#222'],[3,6,'#fff'],[4,6,'#222'],[5,6,'#222'],[6,6,'#fff'],[7,6,'#222'],[8,6,'#222'],[9,6,'#fff'],[10,6,'#222'],[11,6,T2],
+  [1,7,T2],[2,7,'#222'],[3,7,'#222'],[4,7,'#ff4444'],[5,7,'#ff4444'],[6,7,'#ff4444'],[7,7,'#ff4444'],[8,7,'#ff4444'],[9,7,'#222'],[10,7,'#222'],[11,7,T2],
+  // Body
+  [2,8,T1],[3,8,T1],[4,8,T1],[5,8,T1],[6,8,T1],[7,8,T1],[8,8,T1],[9,8,T1],[10,8,T1],
+  [3,9,T1],[4,9,T1],[5,9,T1],[6,9,T1],[7,9,T1],[8,9,T1],[9,9,T1],
+  // Feet (frame 2 — right foot forward)
+  [4,10,T2],[5,10,T2],[9,10,T2],[10,10,T2],
+  [4,11,T2],[5,11,T2],[10,11,T2],[11,11,T2],
+];
+
+// === LEVEL DEFINITIONS ===
+const LEVEL_DEFS = [
+  { type: 'bigger',      gen: () => ({ threshold: randInt(2, 5) }) },
+  { type: 'bigger',      gen: () => ({ threshold: randInt(3, 7) }) },
+  { type: 'smaller',     gen: () => ({ threshold: randInt(5, 9) }) },
+  { type: 'smaller',     gen: () => ({ threshold: randInt(6, 11) }) },
+  { type: 'range',       gen: () => { const lo = randInt(2, 5); return { low: lo, high: lo + randInt(3, 6) }; } },
+  { type: 'range',       gen: () => { const lo = randInt(3, 6); return { low: lo, high: lo + randInt(4, 7) }; } },
+  { type: 'addition',    gen: () => { const a = randInt(1, 5); const b = randInt(1, 5); return { a, b, answer: a + b }; } },
+  { type: 'addition',    gen: () => { const a = randInt(2, 8); const b = randInt(1, 7); return { a, b, answer: a + b }; } },
+  { type: 'subtraction', gen: () => { const a = randInt(3, 8); const b = randInt(1, a - 1); return { a, b, answer: a - b }; } },
+  { type: 'subtraction', gen: () => { const a = randInt(5, 12); const b = randInt(1, a - 1); return { a, b, answer: a - b }; } },
+];
+
+// Troggle config per level
+function getTroggleConfig(level) {
+  if (level <= 2) return { count: 1, interval: 2000, spawnDelay: 8000 };
+  if (level <= 4) return { count: 1, interval: 1500, spawnDelay: 6000 };
+  if (level <= 6) return { count: 2, interval: 1200, spawnDelay: 5000 };
+  if (level <= 8) return { count: 2, interval: 1000, spawnDelay: 4000 };
+  return { count: Math.min(3, 2 + Math.floor((level - 8) / 3)), interval: Math.max(700, 1000 - (level - 8) * 50), spawnDelay: 3000 };
+}
+
+// === GAME STATE ===
+let state = {
+  screen: 'title',  // title, playing, level_complete, life_lost, game_over
+  level: 1,
+  score: 0,
+  lives: INITIAL_LIVES,
+  nextExtraLife: EXTRA_LIFE_FIRST,
+  grid: [],           // 2D array [row][col] of { value, isCorrect, munched }
+  muncher: { row: 2, col: 2 },
+  troggles: [],
+  params: {},
+  correctRemaining: 0,
+  paused: false,
+};
+
+let troggleTimers = [];
+let spawnTimers = [];
+
+// === DOM REFS ===
+const gameEl = document.getElementById('game');
+const gridEl = document.getElementById('grid');
+const muncherEl = document.getElementById('muncher');
+const hudScore = document.getElementById('score');
+const hudLevel = document.getElementById('level-display');
+const hudLives = document.getElementById('lives');
+const promptEl = document.getElementById('prompt');
+const overlayEl = document.getElementById('overlay');
+const flashEl = document.getElementById('flash');
+const titleScreen = document.getElementById('title-screen');
+const titleSprite = document.getElementById('title-muncher-sprite');
+
+// === AUDIO ENGINE ===
+let audioCtx = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch(e) { /* audio not available, game still works */ }
+}
+
+function playTone(freq, duration, type = 'square', volume = 0.15) {
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch(e) {}
+}
+
+function playMunch() {
+  playTone(523, 0.08, 'square', 0.12);
+  setTimeout(() => playTone(392, 0.08, 'square', 0.12), 60);
+}
+
+function playWrong() {
+  playTone(200, 0.2, 'sine', 0.1);
+}
+
+function playLevelComplete() {
+  playTone(523, 0.1, 'square', 0.1);
+  setTimeout(() => playTone(659, 0.1, 'square', 0.1), 100);
+  setTimeout(() => playTone(784, 0.1, 'square', 0.1), 200);
+  setTimeout(() => playTone(1047, 0.15, 'square', 0.12), 300);
+}
+
+function playLifeLost() {
+  playTone(523, 0.12, 'triangle', 0.12);
+  setTimeout(() => playTone(440, 0.12, 'triangle', 0.12), 120);
+  setTimeout(() => playTone(349, 0.15, 'triangle', 0.12), 240);
+}
+
+function playGameOver() {
+  playTone(523, 0.2, 'triangle', 0.1);
+  setTimeout(() => playTone(392, 0.2, 'triangle', 0.1), 200);
+  setTimeout(() => playTone(330, 0.2, 'triangle', 0.1), 400);
+  setTimeout(() => playTone(262, 0.3, 'triangle', 0.12), 600);
+}
+
+function playMove() {
+  playTone(440, 0.04, 'sine', 0.06);
+}
+
+function playExtraLife() {
+  playTone(784, 0.08, 'square', 0.1);
+  setTimeout(() => playTone(988, 0.08, 'square', 0.1), 80);
+  setTimeout(() => playTone(1175, 0.12, 'square', 0.12), 160);
+}
+
+// === SPRITE RENDERER ===
+function buildBoxShadow(pixels, pixelSize) {
+  return pixels.map(([x, y, color]) =>
+    `${x * pixelSize}px ${y * pixelSize}px 0 0 ${color}`
+  ).join(',');
+}
+
+function applySpriteToEl(el, pixels, pixelSize) {
+  el.style.width = pixelSize + 'px';
+  el.style.height = pixelSize + 'px';
+  el.style.boxShadow = buildBoxShadow(pixels, pixelSize);
+  el.style.imageRendering = 'pixelated';
+  el.style.background = 'transparent';
+}
+
+function getPixelSize() {
+  if (!gridEl.children.length) return 4;
+  const cell = gridEl.children[0];
+  const rect = cell.getBoundingClientRect();
+  return Math.max(2, Math.floor(Math.min(rect.width, rect.height) / 16));
+}
+
+// === UTILITY ===
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// === GRID GENERATION ===
+function generateGrid(levelDef, params) {
+  const totalCells = ROWS * COLS;
+  const numCorrect = randInt(8, 14);
+  const numWrong = totalCells - numCorrect;
+
+  let correctValues = [];
+  let wrongValues = [];
+
+  switch (levelDef.type) {
+    case 'bigger': {
+      const t = params.threshold;
+      for (let i = 0; i < numCorrect; i++) correctValues.push(randInt(t + 1, t + 10));
+      for (let i = 0; i < numWrong; i++) wrongValues.push(randInt(Math.max(1, t - 5), t));
+      break;
+    }
+    case 'smaller': {
+      const t = params.threshold;
+      for (let i = 0; i < numCorrect; i++) correctValues.push(randInt(1, t - 1));
+      for (let i = 0; i < numWrong; i++) wrongValues.push(randInt(t, t + 8));
+      break;
+    }
+    case 'range': {
+      const { low, high } = params;
+      for (let i = 0; i < numCorrect; i++) correctValues.push(randInt(low + 1, high - 1));
+      for (let i = 0; i < numWrong; i++) {
+        if (Math.random() < 0.5) wrongValues.push(randInt(Math.max(1, low - 4), low));
+        else wrongValues.push(randInt(high, high + 6));
+      }
+      break;
+    }
+    case 'addition': {
+      const { answer } = params;
+      for (let i = 0; i < numCorrect; i++) correctValues.push(answer);
+      for (let i = 0; i < numWrong; i++) {
+        let wrong = answer;
+        while (wrong === answer) wrong = randInt(Math.max(1, answer - 4), answer + 4);
+        wrongValues.push(wrong);
+      }
+      break;
+    }
+    case 'subtraction': {
+      const { answer } = params;
+      for (let i = 0; i < numCorrect; i++) correctValues.push(answer);
+      for (let i = 0; i < numWrong; i++) {
+        let wrong = answer;
+        while (wrong === answer) wrong = randInt(Math.max(0, answer - 4), answer + 4);
+        wrongValues.push(wrong);
+      }
+      break;
+    }
+  }
+
+  // Combine and shuffle
+  let cells = [
+    ...correctValues.map(v => ({ value: v, isCorrect: true, munched: false })),
+    ...wrongValues.map(v => ({ value: v, isCorrect: false, munched: false })),
+  ];
+  cells = shuffleArray(cells);
+
+  // Build 2D grid
+  const grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      grid[r][c] = cells[r * COLS + c];
+    }
+  }
+
+  return { grid, correctCount: numCorrect };
+}
+
+function getPromptText(type, params) {
+  switch (type) {
+    case 'bigger':      return `Find numbers BIGGER than ${params.threshold}`;
+    case 'smaller':     return `Find numbers SMALLER than ${params.threshold}`;
+    case 'range':       return `BIGGER than ${params.low} AND SMALLER than ${params.high}`;
+    case 'addition':    return `What is ${params.a} + ${params.b}?`;
+    case 'subtraction': return `What is ${params.a} \u2212 ${params.b}?`;
+  }
+}
+
+// === RENDERING ===
+function renderGrid() {
+  gridEl.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      const data = state.grid[r][c];
+      if (data.munched) {
+        cell.classList.add('munched');
+      } else {
+        cell.textContent = data.value;
+      }
+      gridEl.appendChild(cell);
+    }
+  }
+  updateMuncherHighlight();
+}
+
+function getCellEl(row, col) {
+  return gridEl.children[row * COLS + col];
+}
+
+function getCellRect(row, col) {
+  const cell = getCellEl(row, col);
+  if (!cell) return null;
+  const gridRect = gridEl.getBoundingClientRect();
+  const cellRect = cell.getBoundingClientRect();
+  return {
+    left: cellRect.left - gridRect.left,
+    top: cellRect.top - gridRect.top,
+    width: cellRect.width,
+    height: cellRect.height,
+  };
+}
+
+function renderMuncher() {
+  const ps = getPixelSize();
+  applySpriteToEl(muncherEl, MUNCHER_IDLE, ps);
+  positionMuncher();
+}
+
+function positionMuncher() {
+  const rect = getCellRect(state.muncher.row, state.muncher.col);
+  if (!rect) return;
+  const ps = getPixelSize();
+  const spriteW = 14 * ps;
+  const spriteH = 14 * ps;
+  muncherEl.style.left = (rect.left + (rect.width - spriteW) / 2) + 'px';
+  muncherEl.style.top = (rect.top + (rect.height - spriteH) / 2) + 'px';
+}
+
+function updateMuncherHighlight() {
+  const cells = gridEl.querySelectorAll('.cell');
+  cells.forEach(c => c.classList.remove('has-muncher'));
+  const cell = getCellEl(state.muncher.row, state.muncher.col);
+  if (cell) cell.classList.add('has-muncher');
+}
+
+function renderHUD() {
+  hudScore.textContent = `Score: ${state.score}`;
+  hudLevel.textContent = `Level ${state.level}`;
+  let hearts = '';
+  for (let i = 0; i < state.lives; i++) hearts += '\u2665 ';
+  hudLives.textContent = hearts.trim();
+}
+
+function renderTroggles() {
+  // Remove old troggle elements
+  document.querySelectorAll('.troggle').forEach(el => el.remove());
+  const ps = getPixelSize();
+
+  state.troggles.forEach((trog, i) => {
+    const el = document.createElement('div');
+    el.className = 'troggle';
+    el.id = `troggle-${i}`;
+    const sprite = trog.frame === 0 ? TROGGLE_1 : TROGGLE_2;
+    applySpriteToEl(el, sprite, ps);
+    const rect = getCellRect(trog.row, trog.col);
+    if (rect) {
+      const spriteW = 12 * ps;
+      const spriteH = 12 * ps;
+      el.style.left = (rect.left + (rect.width - spriteW) / 2) + 'px';
+      el.style.top = (rect.top + (rect.height - spriteH) / 2) + 'px';
+    }
+    document.getElementById('grid-container').appendChild(el);
+  });
+}
+
+function positionTroggle(index) {
+  const trog = state.troggles[index];
+  if (!trog) return;
+  const el = document.getElementById(`troggle-${index}`);
+  if (!el) return;
+  const ps = getPixelSize();
+  const sprite = trog.frame === 0 ? TROGGLE_1 : TROGGLE_2;
+  applySpriteToEl(el, sprite, ps);
+  const rect = getCellRect(trog.row, trog.col);
+  if (rect) {
+    const spriteW = 12 * ps;
+    const spriteH = 12 * ps;
+    el.style.left = (rect.left + (rect.width - spriteW) / 2) + 'px';
+    el.style.top = (rect.top + (rect.height - spriteH) / 2) + 'px';
+  }
+}
+
+// === FLOATING TEXT ===
+function showFloatingText(row, col, text, color) {
+  const rect = getCellRect(row, col);
+  if (!rect) return;
+  const el = document.createElement('div');
+  el.className = 'float-text';
+  el.textContent = text;
+  el.style.color = color;
+  el.style.left = (rect.left + rect.width / 2) + 'px';
+  el.style.top = rect.top + 'px';
+  el.style.transform = 'translateX(-50%)';
+  document.getElementById('grid-container').appendChild(el);
+  setTimeout(() => el.remove(), 800);
+}
+
+// === SCREEN FLASH ===
+function screenFlash(type) {
+  flashEl.className = type;
+  setTimeout(() => { flashEl.className = ''; }, 300);
+}
+
+// === STARS ===
+function spawnStars() {
+  for (let i = 0; i < 8; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    star.textContent = pick(['\u2605', '\u2736', '\u2733']);
+    star.style.color = pick(['#ffe066', '#66ff88', '#ff66aa', '#88bbff', '#ffaa44']);
+    star.style.left = '50%';
+    star.style.top = '50%';
+    const angle = (Math.PI * 2 * i) / 8;
+    const dist = randInt(80, 160);
+    star.style.setProperty('--tx', `${Math.cos(angle) * dist}px`);
+    star.style.setProperty('--ty', `${Math.sin(angle) * dist}px`);
+    overlayEl.appendChild(star);
+    setTimeout(() => star.remove(), 1000);
+  }
+}
+
+// === TROGGLE AI ===
+const DIRS = [[-1,0],[1,0],[0,-1],[0,1]]; // up, down, left, right
+
+function spawnTroggle() {
+  // Enter from a random edge
+  let row, col;
+  const edge = randInt(0, 3);
+  if (edge === 0) { row = 0; col = randInt(0, COLS - 1); }
+  else if (edge === 1) { row = ROWS - 1; col = randInt(0, COLS - 1); }
+  else if (edge === 2) { row = randInt(0, ROWS - 1); col = 0; }
+  else { row = randInt(0, ROWS - 1); col = COLS - 1; }
+
+  // Don't spawn on the muncher
+  if (row === state.muncher.row && col === state.muncher.col) {
+    col = (col + 3) % COLS;
+  }
+
+  const trog = {
+    row, col,
+    dir: randInt(0, 3),
+    frame: 0,
+  };
+  state.troggles.push(trog);
+  renderTroggles();
+}
+
+function moveTroggle(index) {
+  if (state.paused || state.screen !== 'playing') return;
+  const trog = state.troggles[index];
+  if (!trog) return;
+
+  // 20% chance to change direction randomly
+  if (Math.random() < 0.2) {
+    trog.dir = randInt(0, 3);
+  }
+
+  const [dr, dc] = DIRS[trog.dir];
+  let newRow = trog.row + dr;
+  let newCol = trog.col + dc;
+
+  // Bounce off walls
+  if (newRow < 0 || newRow >= ROWS || newCol < 0 || newCol >= COLS) {
+    // Pick a new direction
+    const options = DIRS.map((d, i) => i).filter(i => {
+      const [r2, c2] = DIRS[i];
+      return trog.row + r2 >= 0 && trog.row + r2 < ROWS && trog.col + c2 >= 0 && trog.col + c2 < COLS;
+    });
+    trog.dir = pick(options);
+    const [dr2, dc2] = DIRS[trog.dir];
+    newRow = trog.row + dr2;
+    newCol = trog.col + dc2;
+  }
+
+  trog.row = newRow;
+  trog.col = newCol;
+  trog.frame = 1 - trog.frame; // toggle walk frame
+  positionTroggle(index);
+
+  // Check collision
+  if (trog.row === state.muncher.row && trog.col === state.muncher.col) {
+    loseLife();
+    return;
+  }
+
+  // Schedule next move
+  const config = getTroggleConfig(state.level);
+  troggleTimers[index] = setTimeout(() => moveTroggle(index), config.interval);
+}
+
+function startTroggles() {
+  const config = getTroggleConfig(state.level);
+  for (let i = 0; i < config.count; i++) {
+    const delay = config.spawnDelay + i * 3000;
+    spawnTimers.push(setTimeout(() => {
+      if (state.screen !== 'playing') return;
+      spawnTroggle();
+      const idx = state.troggles.length - 1;
+      troggleTimers[idx] = setTimeout(() => moveTroggle(idx), config.interval);
+    }, delay));
+  }
+}
+
+function stopTroggles() {
+  troggleTimers.forEach(t => clearTimeout(t));
+  spawnTimers.forEach(t => clearTimeout(t));
+  troggleTimers = [];
+  spawnTimers = [];
+}
+
+// === MUNCHER MOVEMENT ===
+let isMunching = false; // locked during 3-bite animation
+
+function moveMuncherTo(row, col) {
+  if (state.screen !== 'playing' || state.paused || isMunching) return;
+
+  state.muncher.row = row;
+  state.muncher.col = col;
+  positionMuncher();
+  updateMuncherHighlight();
+  playMove();
+
+  // Check collision with troggles
+  for (const trog of state.troggles) {
+    if (trog.row === row && trog.col === col) {
+      loseLife();
+      return;
+    }
+  }
+
+  // Auto-munch
+  const cellData = state.grid[row][col];
+  if (cellData.munched) return; // already eaten
+
+  if (cellData.isCorrect) {
+    doMunchAnimation(row, col, cellData);
+  } else {
+    // Wrong — yuck face!
+    isMunching = true;
+    state.score = Math.max(0, state.score + POINTS_WRONG);
+    const ps = getPixelSize();
+    applySpriteToEl(muncherEl, MUNCHER_YUCK, ps);
+    const cellEl = getCellEl(row, col);
+    cellEl.classList.add('wrong-flash');
+    setTimeout(() => cellEl.classList.remove('wrong-flash'), 400);
+    showFloatingText(row, col, pick(ENCOURAGE_WRONG), '#ff8888');
+    playWrong();
+    renderHUD();
+    // Hold the yuck face for a beat, then return to normal
+    setTimeout(() => {
+      if (state.screen === 'playing') applySpriteToEl(muncherEl, MUNCHER_IDLE, ps);
+      isMunching = false;
+    }, 600);
+  }
+}
+
+// 3-bite chomp animation: open→close→open→close→open→close (nom nom nom)
+function doMunchAnimation(row, col, cellData) {
+  isMunching = true;
+  const ps = getPixelSize();
+  const BITE_TIME = 150; // ms per half-bite (close or open)
+  const BITES = 3;
+  const cellEl = getCellEl(row, col);
+
+  let step = 0;
+  const totalSteps = BITES * 2; // close + open for each bite
+
+  function nextBite() {
+    if (state.screen !== 'playing') { isMunching = false; return; }
+
+    if (step < totalSteps) {
+      if (step % 2 === 0) {
+        // Close mouth (chomp!)
+        applySpriteToEl(muncherEl, MUNCHER_CHOMP, ps);
+        playMunch();
+      } else {
+        // Open mouth
+        applySpriteToEl(muncherEl, MUNCHER_IDLE, ps);
+      }
+      step++;
+      setTimeout(nextBite, BITE_TIME);
+    } else {
+      // Done munching — number is eaten
+      cellData.munched = true;
+      state.correctRemaining--;
+      state.score += POINTS_CORRECT;
+
+      cellEl.classList.add('munched', 'correct-flash');
+      setTimeout(() => cellEl.classList.remove('correct-flash'), 300);
+
+      showFloatingText(row, col, pick(ENCOURAGE_CORRECT), '#66ff88');
+
+      // Return to idle (mouth open, showing empty cell)
+      applySpriteToEl(muncherEl, MUNCHER_IDLE, ps);
+      isMunching = false;
+
+      // Check extra life
+      if (state.score >= state.nextExtraLife && state.lives < MAX_LIVES) {
+        state.lives++;
+        state.nextExtraLife += EXTRA_LIFE_INTERVAL;
+        playExtraLife();
+        showFloatingText(row, col, '+1 LIFE!', '#ff66aa');
+      }
+
+      renderHUD();
+
+      // Level complete?
+      if (state.correctRemaining <= 0) {
+        levelComplete();
+      }
+    }
+  }
+
+  nextBite();
+}
+
+// === STATE TRANSITIONS ===
+function setScreen(screen) {
+  state.screen = screen;
+  gameEl.className = `state-${screen.replace('_', '-')}`;
+}
+
+function startGame() {
+  state.level = 1;
+  state.score = 0;
+  state.lives = INITIAL_LIVES;
+  state.nextExtraLife = EXTRA_LIFE_FIRST;
+  startLevel();
+}
+
+function startLevel() {
+  stopTroggles();
+  state.troggles = [];
+  state.paused = false;
+  isMunching = false;
+  document.querySelectorAll('.troggle').forEach(el => el.remove());
+
+  const defIndex = (state.level - 1) % LEVEL_DEFS.length;
+  const levelDef = LEVEL_DEFS[defIndex];
+  state.params = levelDef.gen();
+
+  const { grid, correctCount } = generateGrid(levelDef, state.params);
+  state.grid = grid;
+  state.correctRemaining = correctCount;
+
+  // Place muncher in center
+  state.muncher.row = Math.floor(ROWS / 2);
+  state.muncher.col = Math.floor(COLS / 2);
+
+  setScreen('playing');
+  overlayEl.classList.add('hidden');
+  promptEl.textContent = getPromptText(levelDef.type, state.params);
+  renderGrid();
+  renderMuncher();
+  renderHUD();
+
+  // Start troggles after delay
+  startTroggles();
+}
+
+function levelComplete() {
+  state.paused = true;
+  stopTroggles();
+  state.score += POINTS_LEVEL_BONUS;
+  renderHUD();
+
+  setScreen('level_complete');
+  overlayEl.classList.remove('hidden');
+  overlayEl.innerHTML = `<h2 class="celebrate">${pick(ENCOURAGE_LEVEL)}</h2><p class="info">+${POINTS_LEVEL_BONUS} Bonus!</p>`;
+  spawnStars();
+  playLevelComplete();
+  screenFlash('green');
+
+  setTimeout(() => {
+    state.level++;
+    startLevel();
+  }, 2500);
+}
+
+function loseLife() {
+  if (state.paused) return;
+  state.paused = true;
+  isMunching = false;
+  stopTroggles();
+  state.lives--;
+  renderHUD();
+  playLifeLost();
+  screenFlash('red');
+
+  if (state.lives <= 0) {
+    setTimeout(gameOver, 800);
+    return;
+  }
+
+  setScreen('life_lost');
+  overlayEl.classList.remove('hidden');
+  overlayEl.innerHTML = `<h2 class="danger">Oh no!</h2><p class="info">Be careful of the Troggles!</p><p class="info">${state.lives} ${state.lives === 1 ? 'life' : 'lives'} left</p>`;
+
+  setTimeout(() => {
+    // Reset muncher to center, keep grid state
+    state.muncher.row = Math.floor(ROWS / 2);
+    state.muncher.col = Math.floor(COLS / 2);
+    state.troggles = [];
+    document.querySelectorAll('.troggle').forEach(el => el.remove());
+    state.paused = false;
+    setScreen('playing');
+    overlayEl.classList.add('hidden');
+    positionMuncher();
+    updateMuncherHighlight();
+    startTroggles();
+  }, 2000);
+}
+
+function gameOver() {
+  setScreen('game_over');
+  overlayEl.classList.remove('hidden');
+  overlayEl.innerHTML = `
+    <h2 class="danger">GAME OVER</h2>
+    <p class="info">Great game!</p>
+    <p class="celebrate" style="font-size: clamp(22px, 5vw, 36px);">Score: ${state.score}</p>
+    <p class="info" style="margin-top: 20px;">You reached Level ${state.level}!</p>
+    <p class="tap-start" style="color: #66ff88; animation: pulse 1.5s ease-in-out infinite; margin-top: 24px;">TAP TO PLAY AGAIN</p>
+  `;
+  playGameOver();
+}
+
+// === EVENT HANDLERS ===
+// Grid tap
+gridEl.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (state.screen !== 'playing' || state.paused) return;
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  const row = parseInt(cell.dataset.row);
+  const col = parseInt(cell.dataset.col);
+  moveMuncherTo(row, col);
+});
+
+// Title screen tap
+titleScreen.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  initAudio();
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  startGame();
+});
+
+// Overlay tap (for game over restart)
+overlayEl.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (state.screen === 'game_over') {
+    initAudio();
+    startGame();
+  }
+});
+
+// Handle resize
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (state.screen === 'playing' || state.screen === 'life_lost') {
+      renderMuncher();
+      state.troggles.forEach((_, i) => positionTroggle(i));
+    }
+    if (state.screen === 'title') renderTitleSprite();
+  }, 100);
+});
+
+// === TITLE SCREEN SPRITE ===
+function renderTitleSprite() {
+  const size = Math.max(3, Math.floor(Math.min(window.innerWidth, window.innerHeight) / 120));
+  applySpriteToEl(titleSprite, MUNCHER_IDLE, size);
+  // The sprite is pixelSize wide, with box-shadows extending right/down from it.
+  // Total sprite width ~14*size, total height ~14*size.
+  // Offset to visually center: half the total extent minus half the element itself.
+  const totalW = 14 * size;
+  const totalH = 14 * size;
+  titleSprite.style.position = 'relative';
+  titleSprite.style.marginBottom = (totalH + 8) + 'px';
+  titleSprite.style.left = `-${(totalW / 2) - (size / 2)}px`;
+}
+
+// === INIT ===
+document.addEventListener('DOMContentLoaded', () => {
+  renderTitleSprite();
+});
+
+// Run init immediately if DOM already ready
+if (document.readyState !== 'loading') {
+  renderTitleSprite();
+}
+</script>
+</body>
+</html>
