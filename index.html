@@ -115,6 +115,8 @@
 
   #grid {
     display: grid;
+    /* Square cells: use the available width to drive cell size */
+    --grid-w: min(96vw, 96vh * 6 / 5);
     grid-template-columns: repeat(6, 1fr);
     grid-template-rows: repeat(5, 1fr);
     gap: 3px;
@@ -122,9 +124,8 @@
     border: 3px solid #4a4a8a;
     border-radius: 6px;
     padding: 3px;
-    width: min(92vw, 540px);
-    height: min(70vh, 420px);
-    height: min(70dvh, 420px);
+    width: var(--grid-w);
+    aspect-ratio: 6 / 5;
   }
 
   .cell {
@@ -134,7 +135,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: clamp(18px, 4vw, 28px);
+    font-size: clamp(22px, 5vw, 44px);
     font-weight: bold;
     color: #fff;
     position: relative;
